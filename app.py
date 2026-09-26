@@ -1,7 +1,12 @@
 
-from flask import Flask
+from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 import datetime
+import requests
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 GENRES = [
         "fiction", 
@@ -70,10 +75,22 @@ def send():
 def about_page():
     return 'This is the about page!'
 
+@app.route('/search-books')
+def search():
+    API_KEY = os.environ.get('GOOGLE_BOOKS_API_KEY')
+    # gets the user's search which is the query
+    query = request.args.get('q')
+    # calls external API and retrieves search results
+    response = requests.get(f'https://www.googleapis.com/books/v1/volumes?q={query}&key={API_KEY}')
+    # gets the response and converts to json
+    data = response.json()
+    # converts python dict/list into JSON HTTP response
+    return jsonify(data)
+
 @app.route('/new-book')
 def add_book():
     book = Book(isbn='9780063462410',
-                title="Starlight", 
+                title="Starside", 
                 author="Alex Aster",
                 image='link goes here',
                 page_count=500,
