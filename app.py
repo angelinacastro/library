@@ -1,5 +1,5 @@
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template
 from flask_sqlalchemy import SQLAlchemy
 import datetime
 import requests
@@ -7,6 +7,7 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
+API_KEY = os.environ.get('GOOGLE_BOOKS_API_KEY')
 
 GENRES = [
         "fiction", 
@@ -77,7 +78,6 @@ def about_page():
 
 @app.route('/search-books')
 def search():
-    API_KEY = os.environ.get('GOOGLE_BOOKS_API_KEY')
     # gets the user's search which is the query
     query = request.args.get('q')
     # calls external API and retrieves search results
@@ -85,7 +85,33 @@ def search():
     # gets the response and converts to json
     data = response.json()
     # converts python dict/list into JSON HTTP response
-    return jsonify(data)
+    results = []
+    # item represents each search result
+    for item in data['items']:
+        # volumeInfo is the key where the actual info we care about from each search result
+        volInfo = item['volumeInfo']
+        saleInfo = item.get('saleInfo', {})
+        isbn = None
+        for identifier in volInfo.get('industryIdentifiers', {}):
+            if identifier.get('type') == 'ISBN_13':
+                isbn = identifier.get('identifier')
+
+        results.append({
+            # get just isbn 13
+            'isbn': isbn,
+            'title': volInfo.get("title"),
+            'author': volInfo.get("authors"),
+            'genre(s)': volInfo.get("categories"),
+            'cover': volInfo.get('imageLinks', {}).get('thumbnail', ''),
+            'page_count': volInfo.get('pageCount'),
+            'type': saleInfo.get('isEbook')
+        })
+
+    return jsonify(results)
+
+@app.route('/render-books')
+def render_templates():
+    return render_template('search.html')
 
 @app.route('/new-book')
 def add_book():

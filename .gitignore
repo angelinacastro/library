@@ -2,3 +2,5 @@
 venv
 instance/
 .env
+static/
+templates/
