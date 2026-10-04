@@ -113,16 +113,22 @@ def search():
 def render_templates():
     return render_template('search.html')
 
-@app.route('/new-book')
+@app.route('/new-book', methods=['POST'])
 def add_book():
-    book = Book(isbn='9780063462410',
-                title="Starside", 
-                author="Alex Aster",
-                cover='link goes here',
-                page_count=500,
-                genre='fantasy',
-                media_type='digital',
-                start_date=datetime.date(2026, 9, 20)
+    rating = request.form['rating']
+    rating = int(rating) if rating else None
+    end_date = request.form['end-date']
+    end_date = datetime.date.fromisoformat(end_date) if end_date else None
+    book = Book(isbn=request.form['isbn'],
+                title=request.form['title'], 
+                author=request.form['author'],
+                cover=request.form['cover'],
+                page_count=int(request.form['page-count']),
+                genre=request.form['genre'],
+                media_type=request.form['media-type'],
+                start_date=datetime.date.fromisoformat(request.form['start-date']),
+                rating=rating,
+                end_date = end_date,
                 )
     if book.genre in GENRES and book.media_type in MEDIA_TYPES:
         db.session.add(book)
