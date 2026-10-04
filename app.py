@@ -43,7 +43,7 @@ class Book(db.Model):
     isbn = db.Column(db.String(100))
     title = db.Column(db.String(100), nullable=False)
     author = db.Column(db.String(200), nullable=False)
-    image = db.Column(db.String(400), nullable=False)
+    cover = db.Column(db.String(400), nullable=False)
     page_count = db.Column(db.Integer, nullable=False)
 
     # chosen from categories
@@ -76,6 +76,7 @@ def send():
 def about_page():
     return 'This is the about page!'
 
+# take what GoogleBooks API gives me, reshape and send back to json
 @app.route('/search-books')
 def search():
     # gets the user's search which is the query
@@ -101,7 +102,6 @@ def search():
             'isbn': isbn,
             'title': volInfo.get("title"),
             'author': volInfo.get("authors"),
-            'genre(s)': volInfo.get("categories"),
             'cover': volInfo.get('imageLinks', {}).get('thumbnail', ''),
             'page_count': volInfo.get('pageCount'),
             'type': saleInfo.get('isEbook')
@@ -118,7 +118,7 @@ def add_book():
     book = Book(isbn='9780063462410',
                 title="Starside", 
                 author="Alex Aster",
-                image='link goes here',
+                cover='link goes here',
                 page_count=500,
                 genre='fantasy',
                 media_type='digital',
