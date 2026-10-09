@@ -1,5 +1,5 @@
 
-from flask import Flask, jsonify, request, render_template
+from flask import Flask, jsonify, request, render_template, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
 import datetime
 import requests
@@ -70,14 +70,14 @@ if genre not in GENRES:
 # when client sends request to '/ Flask calls function and sends returns statement back as response
 @app.route('/')
 def send():
-    return 'Hello World!'
+    return render_template('home.html')
 
 @app.route('/about')
 def about_page():
     return 'This is the about page!'
 
 # take what GoogleBooks API gives me, reshape and send back to json
-@app.route('/search-books')
+@app.route('/search-books') # API route, returns jsonify
 def search():
     # gets the user's search which is the query
     query = request.args.get('q')
@@ -109,7 +109,7 @@ def search():
 
     return jsonify(results)
 
-@app.route('/render-books')
+@app.route('/search')
 def render_templates():
     return render_template('search.html')
 
@@ -133,15 +133,62 @@ def add_book():
     if book.genre in GENRES and book.media_type in MEDIA_TYPES:
         db.session.add(book)
         db.session.commit()
-        return "Book added!"
+        return render_template('new-book.html')
     else:
         return "Genre or media type invalid!"
     
+@app.route('/book/<int:book_id>/delete', methods=['POST'])
+def delete_book(book_id):
+    book = Book.query.get(book_id)
+    if book is None:
+        return "Book not found"
+    else:
+        db.session.delete(book)
+        db.session.commit()
+    
+        return redirect(url_for('query_all'))
+
+# modify book page
+@app.route('/book/<int:book_id>/modify-book', methods=['GET', 'POST'])
+def modify_book(book_id):
+    book = Book.query.get(book_id)
+    if book is None:
+        return "Book not found"
+    if request.method == 'POST':
+        print(request.form)
+        rating = request.form['rating']
+        book.rating = int(rating) if rating else None
+        end_date = request.form['end-date']
+        book.end_date = datetime.date.fromisoformat(end_date) if end_date else None
+        book.isbn=request.form['isbn']
+        book.title=request.form['title']
+        book.author=request.form['author']
+        book.cover=request.form['cover']
+        book.page_count=int(request.form['page-count'])
+        genre=request.form['genre']
+        if genre in GENRES: book.genre = genre
+        media_type=request.form['media-type']
+        if media_type in MEDIA_TYPES: book.media_type = media_type
+        book.start_date=datetime.date.fromisoformat(request.form['start-date'])
+        db.session.commit()
+        return redirect(url_for('show_book_details', book_id=book.id))
+    if request.method == 'GET':
+        return render_template('modify-book.html', book=book)
+
+# book detail page
+@app.route('/book/<int:book_id>')
+def show_book_details(book_id):
+    book = Book.query.get(book_id)
+    if book is None:
+        return "Book not found!"
+    else:
+        return render_template('book.html', book=book)       
+                           
 @app.route('/all-books')
 def query_all():
     books = Book.query.all()
     # str(books) internally calls __repr__()
-    return str(books)
+    return render_template('all-books.html', books=books)
 
 if __name__ == '__main__':
     with app.app_context():
