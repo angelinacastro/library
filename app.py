@@ -1,10 +1,11 @@
 
-from flask import Flask, jsonify, request, render_template, redirect, url_for
+from flask import Flask, jsonify, request, render_template, redirect, url_for, abort
 from flask_sqlalchemy import SQLAlchemy
 import datetime
 import requests
 import os
 from dotenv import load_dotenv
+from sqlalchemy import func
 
 load_dotenv()
 API_KEY = os.environ.get('GOOGLE_BOOKS_API_KEY')
@@ -38,6 +39,7 @@ db.init_app(app)
 class Book(db.Model):
     # column uniquely identifying each row
     # necessary fields
+    sessions = db.relationship('ReadingSession', backref='owner', cascade='all, delete-orphan')
 
     id = db.Column(db.Integer, primary_key=True)
     isbn = db.Column(db.String(100))
@@ -45,13 +47,13 @@ class Book(db.Model):
     author = db.Column(db.String(200), nullable=False)
     cover = db.Column(db.String(400), nullable=False)
     page_count = db.Column(db.Integer, nullable=False)
+    start_date = db.Column(db.Date, nullable=False)
 
     # chosen from categories
     genre = db.Column(db.String(100), nullable=False)
     media_type = db.Column(db.String(100), nullable=False)
 
     # optional fields
-    start_date = db.Column(db.Date)
     end_date = db.Column(db.Date)
     rating = db.Column(db.Integer)
     __table_args__ = (
@@ -62,10 +64,11 @@ class Book(db.Model):
 
         return f"Book(isbn={self.isbn}, title={self.title} author={self.author})"
 
-"""
-if genre not in GENRES:
-    don't add book object
-"""
+class ReadingSession(db.Model):
+    owner_id = db.Column(db.Integer, db.ForeignKey('Book.id'), nullable=False)
+    id = db._Column(db.Integer, primary_key=True)
+    
+
 
 # when client sends request to '/ Flask calls function and sends returns statement back as response
 @app.route('/')
@@ -82,7 +85,12 @@ def search():
     # gets the user's search which is the query
     query = request.args.get('q')
     # calls external API and retrieves search results
-    response = requests.get(f'https://www.googleapis.com/books/v1/volumes?q={query}&key={API_KEY}')
+    params = {
+        'q': f'intitle:{query}',
+        'key': API_KEY,
+        'maxResults': 20
+    }
+    response = requests.get('https://www.googleapis.com/books/v1/volumes', params=params)    
     # gets the response and converts to json
     data = response.json()
     # converts python dict/list into JSON HTTP response
@@ -135,13 +143,13 @@ def add_book():
         db.session.commit()
         return render_template('new-book.html')
     else:
-        return "Genre or media type invalid!"
+        return abort(404)
     
 @app.route('/book/<int:book_id>/delete', methods=['POST'])
 def delete_book(book_id):
-    book = Book.query.get(book_id)
+    book = db.session.get(Book, book_id)
     if book is None:
-        return "Book not found"
+        return abort(404)
     else:
         db.session.delete(book)
         db.session.commit()
@@ -151,9 +159,9 @@ def delete_book(book_id):
 # modify book page
 @app.route('/book/<int:book_id>/modify-book', methods=['GET', 'POST'])
 def modify_book(book_id):
-    book = Book.query.get(book_id)
+    book = db.session.get(Book, book_id)
     if book is None:
-        return "Book not found"
+        return abort(404)
     if request.method == 'POST':
         print(request.form)
         rating = request.form['rating']
@@ -178,9 +186,9 @@ def modify_book(book_id):
 # book detail page
 @app.route('/book/<int:book_id>')
 def show_book_details(book_id):
-    book = Book.query.get(book_id)
+    book = db.session.get(Book, book_id)
     if book is None:
-        return "Book not found!"
+        return abort(404)
     else:
         return render_template('book.html', book=book)       
                            
@@ -189,6 +197,24 @@ def query_all():
     books = Book.query.all()
     # str(books) internally calls __repr__()
     return render_template('all-books.html', books=books)
+
+@app.route('/stats')
+def display_stats():
+    genres = dict(db.session.query(Book.genre, func.count(Book.id)).group_by(Book.genre).all())
+    print(genres)
+    for genre, count in genres.items():
+        print(genre)
+        print(count)
+
+    rating_dis = dict(db.session.query(Book.rating, func.count(Book.id)).filter(Book.rating.isnot(None)).group_by(Book.rating).all())
+    ratings = [(n, rating_dis.get(n, 0)) for n in range(1, 6)]
+    media_type_dis = db.session.query(Book.media_type, func.count(Book.id)).group_by(Book.media_type).all()
+    _, dig_count = media_type_dis[0]
+    _, phy_count = media_type_dis[1]    
+    total = db.session.query(func.count(Book.id)).scalar()
+    total_finished = db.session.query(func.count(Book.id)).filter(Book.end_date.isnot(None)).scalar()
+
+    return render_template('stats.html', genres=genres, ratings=ratings, phy_count=phy_count, dig_count= dig_count, total=total, total_finished=total_finished)
 
 if __name__ == '__main__':
     with app.app_context():
