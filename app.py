@@ -39,7 +39,6 @@ db.init_app(app)
 class Book(db.Model):
     # column uniquely identifying each row
     # necessary fields
-    sessions = db.relationship('ReadingSession', backref='owner', cascade='all, delete-orphan')
 
     id = db.Column(db.Integer, primary_key=True)
     isbn = db.Column(db.String(100))
@@ -57,18 +56,12 @@ class Book(db.Model):
     end_date = db.Column(db.Date)
     rating = db.Column(db.Integer)
     __table_args__ = (
-        db.CheckConstraint('rating <= 5 AND rating >= 0'),
+        db.CheckConstraint('rating <= 5 AND rating >= 1'),
     )
     # __init__() NOT NECESSARY because db.Model has built in constructor
     def __repr__(self):
 
         return f"Book(isbn={self.isbn}, title={self.title} author={self.author})"
-
-class ReadingSession(db.Model):
-    owner_id = db.Column(db.Integer, db.ForeignKey('Book.id'), nullable=False)
-    id = db._Column(db.Integer, primary_key=True)
-    
-
 
 # when client sends request to '/ Flask calls function and sends returns statement back as response
 @app.route('/')
@@ -141,9 +134,9 @@ def add_book():
     if book.genre in GENRES and book.media_type in MEDIA_TYPES:
         db.session.add(book)
         db.session.commit()
-        return render_template('new-book.html')
+        return render_template('book.html', book=book)
     else:
-        return abort(404)
+        return abort(400)
     
 @app.route('/book/<int:book_id>/delete', methods=['POST'])
 def delete_book(book_id):
@@ -201,11 +194,6 @@ def query_all():
 @app.route('/stats')
 def display_stats():
     genres = dict(db.session.query(Book.genre, func.count(Book.id)).group_by(Book.genre).all())
-    print(genres)
-    for genre, count in genres.items():
-        print(genre)
-        print(count)
-
     rating_dis = dict(db.session.query(Book.rating, func.count(Book.id)).filter(Book.rating.isnot(None)).group_by(Book.rating).all())
     ratings = [(n, rating_dis.get(n, 0)) for n in range(1, 6)]
     media_type_dis = db.session.query(Book.media_type, func.count(Book.id)).group_by(Book.media_type).all()
@@ -213,8 +201,16 @@ def display_stats():
     _, phy_count = media_type_dis[1]    
     total = db.session.query(func.count(Book.id)).scalar()
     total_finished = db.session.query(func.count(Book.id)).filter(Book.end_date.isnot(None)).scalar()
-
-    return render_template('stats.html', genres=genres, ratings=ratings, phy_count=phy_count, dig_count= dig_count, total=total, total_finished=total_finished)
+    currently_reading = Book.query.filter(Book.end_date==None).all()
+    finished = Book.query.filter(Book.end_date.isnot(None)).all()
+    return render_template('stats.html', genres=genres, 
+                           ratings=ratings, 
+                           phy_count=phy_count, 
+                           dig_count= dig_count, 
+                           currently_reading=currently_reading,
+                           finished=finished,
+                           total=total, 
+                           total_finished=total_finished)
 
 if __name__ == '__main__':
     with app.app_context():
